@@ -63,6 +63,7 @@ int dist_main(int argc, char *argv[]) {
             case 'c': mincount = std::atoi(optarg);     break;
             case 'g': entropy_minimization = true; LOG_WARNING("Entropy-based minimization is probably theoretically ill-founded, but it might be of practical value.\n"); break;
             case 'k': k        = std::atoi(optarg);           break;
+            case 'W': cache_sketch = true; break;
             case 'M': result_type = MASH_DIST; break;
             case 'o': if((ofp = fopen(optarg, "w")) == nullptr) LOG_EXIT("Could not open file at %s for writing.\n", optarg); break;
             case 'p': nthreads = std::atoi(optarg);     break;
