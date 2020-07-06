@@ -10,6 +10,20 @@ using bns::Spacer;
 using bns::KSeqBufferHolder;
 using namespace sketch;
 
+#ifndef LAI
+#  if defined(__GNUC__)
+#    if __cplusplus < 201703L
+#      define LAI __attribute__((__always_inline__))
+#    elif __clang__
+#      define LAI [[gnu::always_inline]]
+#    else
+#      define LAI [[always_inline]]
+#    endif
+#  else
+     #define LAI
+#  endif
+#endif
+
 namespace bns {
 
 template<typename FType, typename=typename std::enable_if<std::is_floating_point<FType>::value>::type>
@@ -206,15 +220,15 @@ void dist_sketch_and_cmp(std::vector<std::string> &inpaths, std::vector<Counting
                     Encoder<score::Lex> enc(nullptr, 0, sp, nullptr, canon);
                     if(cms.empty()) {
                         auto &h = sketch;
-                        if(enct == BONSAI) for_each_substr([&](const char *s) {enc.for_each([&](u64 kmer){h.addh(kmer);}, s, &kseqs[tid]);}, inpaths[i], FNAME_SEP);
-                        else if(enct == NTHASH) for_each_substr([&](const char *s) {enc.for_each_hash([&](u64 kmer){h.addh(kmer);}, s, &kseqs[tid]);}, inpaths[i], FNAME_SEP);
-                        else for_each_substr([&](const char *s) {rolling_hasher.for_each_hash([&](u64 kmer){h.addh(kmer);}, s, &kseqs[tid]);}, inpaths[i], FNAME_SEP);
+                        if(enct == BONSAI) for_each_substr([&](const char *s) LAI {enc.for_each([&](u64 kmer) LAI {h.addh(kmer);}, s, &kseqs[tid]);}, inpaths[i], FNAME_SEP);
+                        else if(enct == NTHASH) for_each_substr([&](const char *s) LAI {enc.for_each_hash([&](u64 kmer) LAI {h.addh(kmer);}, s, &kseqs[tid]);}, inpaths[i], FNAME_SEP);
+                        else for_each_substr([&](const char *s) LAI {rolling_hasher.for_each_hash([&](u64 kmer) LAI {h.addh(kmer);}, s, &kseqs[tid]);}, inpaths[i], FNAME_SEP);
                     } else {
                         CountingSketch &cm = cms.at(tid);
-                        const auto lfunc = [&](u64 kmer){if(cm.addh(kmer) >= mincount) sketch.addh(kmer);};
-                        if(enct == BONSAI)      for_each_substr([&](const char *s) {enc.for_each(lfunc, s, &kseqs[tid]);}, inpaths[i], FNAME_SEP);
-                        else if(enct == NTHASH) for_each_substr([&](const char *s) {enc.for_each_hash(lfunc, s, &kseqs[tid]);}, inpaths[i], FNAME_SEP);
-                        else                    for_each_substr([&](const char *s) {rolling_hasher.for_each_hash(lfunc, s, &kseqs[tid]);}, inpaths[i], FNAME_SEP);
+                        const auto lfunc = [&](u64 kmer) LAI {if(cm.addh(kmer) >= mincount) sketch.addh(kmer);};
+                        if(enct == BONSAI)      for_each_substr([&](const char *s) LAI {enc.for_each(lfunc, s, &kseqs[tid]);}, inpaths[i], FNAME_SEP);
+                        else if(enct == NTHASH) for_each_substr([&](const char *s) LAI {enc.for_each_hash(lfunc, s, &kseqs[tid]);}, inpaths[i], FNAME_SEP);
+                        else                    for_each_substr([&](const char *s) LAI {rolling_hasher.for_each_hash(lfunc, s, &kseqs[tid]);}, inpaths[i], FNAME_SEP);
                         cm.clear();
                     }
                     CONST_IF(!samesketch) new(final_sketches + i) final_type(std::move(sketch)); 
@@ -355,14 +369,14 @@ INLINE void sketch_core(uint32_t ssarg, uint32_t nthreads, uint32_t wsz, uint32_
             const auto &path = inpaths[i];
             if(use_filter.size() && use_filter[i]) {
                 auto &cm = cms[tid];
-                auto lfunc = [&](u64 kmer){if(cm.addh(kmer) >= mincount) h.add(kmer);};
-#define FOR_EACH_FUNC(wrapperfunc) for_each_substr([&](const char *s) {wrapperfunc(lfunc, s, &kseqs[tid]);}, path, FNAME_SEP)
+                auto lfunc = [&](u64 kmer) LAI {if(cm.addh(kmer) >= mincount) h.add(kmer);};
+#define FOR_EACH_FUNC(wrapperfunc) for_each_substr([&](const char *s) LAI {wrapperfunc(lfunc, s, &kseqs[tid]);}, path, FNAME_SEP)
                 if(enct == NTHASH)      FOR_EACH_FUNC(enc.for_each_hash);
                 else if(enct == BONSAI) FOR_EACH_FUNC(enc.for_each);
                 else                    FOR_EACH_FUNC(rolling_hasher.for_each_hash);
                 cm.clear();
             } else {
-                auto lfunc = [&](u64 kmer){h.add(kmer);};
+                auto lfunc = [&](u64 kmer) LAI {h.add(kmer);};
                 if(enct == NTHASH)      FOR_EACH_FUNC(enc.for_each_hash);
                 else if(enct == BONSAI) FOR_EACH_FUNC(enc.for_each);
                 else                    FOR_EACH_FUNC(rolling_hasher.for_each_hash);
@@ -413,8 +427,8 @@ INLINE void sketch_by_seq_core(uint32_t ssarg, uint32_t nthreads, const Spacer &
     fprintf(nameofp, "#k=%d:Names for sequences sketched\n", k);
     kseq_t *ks = kseq_init(fp);
     auto &h = working_sketch; // just alias for less typing
-    auto add = [&](u64 kmer) {h.addh(kmer);};
-    auto cadd = [&](u64 kmer){if(cm->addh(kmer) >= mincount) h.addh(kmer);};
+    auto add = [&](u64 kmer) LAI {h.addh(kmer);};
+    auto cadd = [&](u64 kmer) LAI {if(cm->addh(kmer) >= mincount) h.addh(kmer);};
     std::vector<std::string> seqnames;
     while(kseq_read(ks) >= 0) {
         if(use_filter) {
@@ -647,7 +661,7 @@ void nndist_loop(std::FILE *ofp, SketchType *sketches,
 #define CORE_ITER() do {\
         switch(result_type) {\
             case MASH_DIST: {\
-                perform_core_op(dists, nsketches, sketches, [ksinv](const auto &x, const auto &y) {return dist_index(similarity<const SketchType>(x, y), ksinv);}, i);\
+                perform_core_op(dists, nsketches, sketches, [ksinv](const auto &x, const auto &y) LAI {return dist_index(similarity<const SketchType>(x, y), ksinv);}, i);\
                 break;\
             }\
             case JI: {\
@@ -659,17 +673,17 @@ void nndist_loop(std::FILE *ofp, SketchType *sketches,
                 break;\
             }\
             case FULL_MASH_DIST:\
-                perform_core_op(dists, nsketches, sketches, [ksinv](const auto &x, const auto &y) {return full_dist_index(similarity<const SketchType>(x, y), ksinv);}, i);\
+                perform_core_op(dists, nsketches, sketches, [ksinv](const auto &x, const auto &y) LAI {return full_dist_index(similarity<const SketchType>(x, y), ksinv);}, i);\
                 break;\
             case SYMMETRIC_CONTAINMENT_DIST:\
-                perform_core_op(dists, nsketches, sketches, [ksinv](const auto &x, const auto &y) { \
+                perform_core_op(dists, nsketches, sketches, [ksinv](const auto &x, const auto &y) LAI { \
                     const auto triple = set_triple(x, y);\
                     auto ret = triple[2] / (std::min(triple[0], triple[1]) + triple[2]);\
                     return dist_index(ret, ksinv);\
                 }, i);\
                 break;\
             case SYMMETRIC_CONTAINMENT_INDEX:\
-                perform_core_op(dists, nsketches, sketches, [&](const auto &x, const auto &y) {\
+                perform_core_op(dists, nsketches, sketches, [&](const auto &x, const auto &y) LAI {\
                     const auto triple = set_triple(x, y);\
                     return triple[2] / (std::min(triple[0], triple[1]) + triple[2]);\
                 }, i);\
@@ -748,4 +762,5 @@ void dist_loop(std::FILE *ofp, SketchType *sketches, const std::vector<std::stri
                                 int sketchflags, uint32_t mincount, EncodingType enct, std::string s);\
 
 
+#undef LAI
 } // namespace bns
